@@ -1,0 +1,26 @@
+[
+  {
+    "model": "claude-haiku-4-5",
+    "avg_ms": 3247,
+    "total_in": 446,
+    "total_out": 450,
+    "total_cost_usd": 0.002696,
+    "cost_per_1k_items_usd": 0.9
+  },
+  {
+    "model": "claude-sonnet-4-6",
+    "avg_ms": 4974,
+    "total_in": 449,
+    "total_out": 549,
+    "total_cost_usd": 0.009582,
+    "cost_per_1k_items_usd": 3.19
+  },
+  {
+    "model": "gpt-4o-mini",
+    "avg_ms": 2904,
+    "total_in": 344,
+    "total_out": 380,
+    "total_cost_usd": 0.00028,
+    "cost_per_1k_items_usd": 0.09
+  }
+]

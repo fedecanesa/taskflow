@@ -1,0 +1,4 @@
+model,avg_ms,total_in,total_out,total_cost_usd,cost_per_1k_items_usd
+claude-haiku-4-5,3247,446,450,0.002696,0.9
+claude-sonnet-4-6,4974,449,549,0.009582,3.19
+gpt-4o-mini,2904,344,380,0.00028,0.09
