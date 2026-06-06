@@ -1,4 +1,4 @@
-model,avg_ms,total_in,total_out,total_cost_usd,cost_per_1k_items_usd
-claude-haiku-4-5,3247,446,450,0.002696,0.9
-claude-sonnet-4-6,4974,449,549,0.009582,3.19
-gpt-4o-mini,2904,344,380,0.00028,0.09
+model,avg_ms,total_in,total_out,cache_read_tok,cache_write_tok,total_cost_usd,saving_usd,cost_per_1k_items_usd
+claude-haiku-4-5,1841,401,320,0,0,0.002001,0,0.67
+claude-sonnet-4-6,4109,404,435,0,0,0.007737,0,2.58
+gpt-4o-mini,2621,314,280,0,0,0.000215,0,0.07

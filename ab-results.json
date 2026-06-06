@@ -1,26 +1,35 @@
 [
   {
     "model": "claude-haiku-4-5",
-    "avg_ms": 3247,
-    "total_in": 446,
-    "total_out": 450,
-    "total_cost_usd": 0.002696,
-    "cost_per_1k_items_usd": 0.9
+    "avg_ms": 1841,
+    "total_in": 401,
+    "total_out": 320,
+    "cache_read_tok": 0,
+    "cache_write_tok": 0,
+    "total_cost_usd": 0.002001,
+    "saving_usd": 0,
+    "cost_per_1k_items_usd": 0.67
   },
   {
     "model": "claude-sonnet-4-6",
-    "avg_ms": 4974,
-    "total_in": 449,
-    "total_out": 549,
-    "total_cost_usd": 0.009582,
-    "cost_per_1k_items_usd": 3.19
+    "avg_ms": 4109,
+    "total_in": 404,
+    "total_out": 435,
+    "cache_read_tok": 0,
+    "cache_write_tok": 0,
+    "total_cost_usd": 0.007737,
+    "saving_usd": 0,
+    "cost_per_1k_items_usd": 2.58
   },
   {
     "model": "gpt-4o-mini",
-    "avg_ms": 2904,
-    "total_in": 344,
-    "total_out": 380,
-    "total_cost_usd": 0.00028,
-    "cost_per_1k_items_usd": 0.09
+    "avg_ms": 2621,
+    "total_in": 314,
+    "total_out": 280,
+    "cache_read_tok": 0,
+    "cache_write_tok": 0,
+    "total_cost_usd": 0.000215,
+    "saving_usd": 0,
+    "cost_per_1k_items_usd": 0.07
   }
 ]

@@ -16,6 +16,15 @@ const PRICES = {
   "gpt-4o-mini": { input: 0.15, output: 0.6 },
 };
 
+// Multiplicadores de prompt caching de Anthropic (sobre el precio de input):
+//   - lectura desde caché: 0.1x   - escritura en caché (TTL 5 min): 1.25x
+const CACHE_READ_MULT = 0.1;
+const CACHE_WRITE_MULT = 1.25;
+
+// Tope de salida ajustado al tamaño real de un resumen de ~90 palabras.
+// Estimación: ~90 palabras en español ≈ ~160 tokens; 180 deja margen sin truncar.
+const MAX_TOKENS = 180;
+
 // Cada modelo declara su proveedor para enrutar la llamada en generate()
 const MODELS = [
   { name: "claude-haiku-4-5", provider: "anthropic" },
@@ -23,10 +32,8 @@ const MODELS = [
   { name: "gpt-4o-mini", provider: "openai" },
 ];
 
-// Variante: Resúmenes Ejecutivos de proyectos
-const SYSTEM = `Eres un asistente de gestión de proyectos. 
-Redactás resúmenes ejecutivos claros y profesionales para compartir con jefes o clientes. 
-Respondé solo con el resumen, sin títulos ni aclaraciones. Máximo 120 palabras.`;
+// Variante: Resúmenes Ejecutivos de proyectos (system prompt acortado)
+const SYSTEM = `Sos asistente de gestión de proyectos. Redactá resúmenes ejecutivos claros y profesionales (máx. 90 palabras). Devolvé solo el resumen, sin títulos ni aclaraciones.`;
 
 const ITEMS = [
   "Proyecto: Migración de base de datos a la nube. Estado: 60% completado. Tareas pendientes: testing de performance y capacitación del equipo. Fecha límite: 30 de junio.",
@@ -37,32 +44,43 @@ const ITEMS = [
 const INSTRUCTION = (item) =>
   `Generá un resumen ejecutivo profesional para el siguiente proyecto:\n\n${item}`;
 
-function costUSD(model, inTok, outTok) {
+function costUSD(model, { inTok, outTok, cacheRead = 0, cacheCreate = 0 }) {
   const p = PRICES[model];
-  return (inTok / 1e6) * p.input + (outTok / 1e6) * p.output;
+  return (
+    (inTok / 1e6) * p.input +
+    (cacheRead / 1e6) * p.input * CACHE_READ_MULT +
+    (cacheCreate / 1e6) * p.input * CACHE_WRITE_MULT +
+    (outTok / 1e6) * p.output
+  );
 }
 
 async function generateAnthropic(model, prompt) {
   const msg = await anthropic.messages.create({
     model,
-    max_tokens: 200,
-    system: SYSTEM,
+    max_tokens: MAX_TOKENS,
+    // Bloque system marcado para prompt caching (prefijo estable y compartido).
+    system: [
+      { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
+    ],
     messages: [{ role: "user", content: prompt }],
   });
   const text = msg.content
     .map((b) => (b.type === "text" ? b.text : ""))
     .join("");
+  const u = msg.usage;
   return {
     text,
-    inTok: msg.usage.input_tokens,
-    outTok: msg.usage.output_tokens,
+    inTok: u.input_tokens, // input NO cacheado (precio completo)
+    outTok: u.output_tokens,
+    cacheRead: u.cache_read_input_tokens ?? 0, // servidos desde caché (0.1x)
+    cacheCreate: u.cache_creation_input_tokens ?? 0, // escritos a caché (1.25x)
   };
 }
 
 async function generateOpenAI(model, prompt) {
   const res = await openai.chat.completions.create({
     model,
-    max_tokens: 200,
+    max_tokens: MAX_TOKENS,
     messages: [
       { role: "system", content: SYSTEM },
       { role: "user", content: prompt },
@@ -72,17 +90,19 @@ async function generateOpenAI(model, prompt) {
     text: res.choices[0].message.content ?? "",
     inTok: res.usage.prompt_tokens,
     outTok: res.usage.completion_tokens,
+    cacheRead: 0, // OpenAI no usa el caché de Anthropic
+    cacheCreate: 0,
   };
 }
 
 async function generate({ name, provider }, prompt) {
   const t0 = Date.now();
-  const { text, inTok, outTok } =
+  const r =
     provider === "openai"
       ? await generateOpenAI(name, prompt)
       : await generateAnthropic(name, prompt);
   const ms = Date.now() - t0;
-  return { text, ms, inTok, outTok, cost: costUSD(name, inTok, outTok) };
+  return { ...r, ms, cost: costUSD(name, r) };
 }
 
 async function main() {
@@ -91,7 +111,9 @@ async function main() {
     let totMs = 0,
       totIn = 0,
       totOut = 0,
-      totCost = 0;
+      totCost = 0,
+      totCacheRead = 0,
+      totCacheCreate = 0;
     console.log("\n=== " + model.name + " ===");
     for (const item of ITEMS) {
       const r = await generate(model, INSTRUCTION(item));
@@ -99,6 +121,8 @@ async function main() {
       totIn += r.inTok;
       totOut += r.outTok;
       totCost += r.cost;
+      totCacheRead += r.cacheRead;
+      totCacheCreate += r.cacheCreate;
       console.log("\n- " + r.text);
       console.log(
         "  (" +
@@ -107,17 +131,30 @@ async function main() {
           r.inTok +
           " / out " +
           r.outTok +
-          " tok | $" +
+          " tok | caché: " +
+          r.cacheRead +
+          " leídos / " +
+          r.cacheCreate +
+          " nuevos | $" +
           r.cost.toFixed(6) +
           ")",
       );
     }
+    // Ahorro estimado vs correr sin caché: las lecturas de caché habrían costado
+    // input a precio completo (en vez de 0.1x); restamos el sobrecosto de escritura (0.25x extra).
+    const p = PRICES[model.name];
+    const savingUsd =
+      (totCacheRead / 1e6) * p.input * (1 - CACHE_READ_MULT) -
+      (totCacheCreate / 1e6) * p.input * (CACHE_WRITE_MULT - 1);
     rows.push({
       model: model.name,
       avg_ms: Math.round(totMs / ITEMS.length),
       total_in: totIn,
       total_out: totOut,
+      cache_read_tok: totCacheRead,
+      cache_write_tok: totCacheCreate,
       total_cost_usd: Number(totCost.toFixed(6)),
+      saving_usd: Number(savingUsd.toFixed(6)),
       cost_per_1k_items_usd: Number(
         ((totCost / ITEMS.length) * 1000).toFixed(2),
       ),
@@ -130,10 +167,10 @@ async function main() {
 
   // Exportar a CSV
   const csv = [
-    "model,avg_ms,total_in,total_out,total_cost_usd,cost_per_1k_items_usd",
+    "model,avg_ms,total_in,total_out,cache_read_tok,cache_write_tok,total_cost_usd,saving_usd,cost_per_1k_items_usd",
     ...rows.map(
       (r) =>
-        `${r.model},${r.avg_ms},${r.total_in},${r.total_out},${r.total_cost_usd},${r.cost_per_1k_items_usd}`,
+        `${r.model},${r.avg_ms},${r.total_in},${r.total_out},${r.cache_read_tok},${r.cache_write_tok},${r.total_cost_usd},${r.saving_usd},${r.cost_per_1k_items_usd}`,
     ),
   ].join("\n");
   fs.writeFileSync("ab-results.csv", csv);
